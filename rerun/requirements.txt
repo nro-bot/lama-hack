@@ -1,0 +1,24 @@
+rerun-sdk
+numpy
+pandas
+scipy
+matplotlib
+jupyter
+
+# Pinned exactly: rerun-sdk 0.34.1's dataframe query API (ChunkStore.reader)
+# is only ABI-compatible with this datafusion release. A newer datafusion
+# (e.g. latest via `pip install datafusion`) loads fine but SEGFAULTS the
+# moment a query is executed, since its bundled arrow-rs doesn't match what
+# rerun_bindings was compiled against. Check rerun-sdk's `datafusion` extra
+# pin if you ever bump rerun-sdk.
+datafusion==53.0.0
+
+# lerobot is NOT installed here: this machine only has Python 3.14, and
+# lerobot pins numpy<2.3 which has no prebuilt wheel for cp314 and needs a
+# C/C++ compiler (Visual Studio Build Tools) to build from source, which
+# isn't present. If you need lerobot's parquet-loading helpers:
+#   1. Install Python 3.11 or 3.12 (e.g. `winget install Python.Python.3.12`)
+#   2. Recreate the venv with that interpreter and `pip install lerobot`
+# Since our data is already logged to .rrd, rerun-sdk alone is enough for
+# scripts/inspect_data.py and most of the kinematics analysis.
+# lerobot

@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# rerun/ subproject
+rerun/venv/
+rerun/data/*
+!rerun/data/.gitkeep
+rerun/output/*
+!rerun/output/.gitkeep
