@@ -9,11 +9,11 @@
 <body>
 <style>
   :root {
-    --paper: #fcfcfa;
-    --raise: #ffffff;
-    --ink: #1c1b22;
-    --muted: #6d6a78;
-    --line: #e6e4df;
+    --paper: #f6f1e6;
+    --raise: #fdfaf3;
+    --ink: #2a2620;
+    --muted: #787061;
+    --line: #e4dccb;
     --bar-blue: #3b6fd4;
     --bar-purple: #7a4fe0;
     --bar-red: #d64536;
@@ -34,7 +34,11 @@
     font-size: clamp(14px, 1.35vw, 19px);
   }
 
-  .deck { height: 100vh; position: relative; }
+  #bg {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    z-index: 0; pointer-events: none;
+  }
+  .deck { height: 100vh; position: relative; z-index: 1; }
 
   .slide {
     position: absolute; inset: 0;
@@ -66,7 +70,7 @@
 
   code, .mono { font-family: var(--mono); font-size: 0.88em; }
   code {
-    background: #f1f0ec;
+    background: #ece5d4;
     border-radius: 4px;
     padding: 0.12em 0.4em;
     white-space: nowrap;
@@ -141,7 +145,7 @@
   table { border-collapse: collapse; width: 100%; font-size: 0.92em; background: var(--raise); border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 0.7em 1em; border-bottom: 1px solid var(--line); }
   tr:last-child td { border-bottom: none; }
-  th { font-family: var(--mono); font-size: 0.7em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: #f6f5f2; }
+  th { font-family: var(--mono); font-size: 0.7em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: #f3edde; }
   td.mono { font-variant-numeric: tabular-nums; }
   .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
 
@@ -159,6 +163,8 @@
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   }
 </style>
+
+<canvas id="bg" aria-hidden="true"></canvas>
 
 <div class="deck">
 
@@ -349,6 +355,73 @@
     if (e.target.closest("code, a")) return;
     go(e.clientX > innerWidth / 3 ? i + 1 : i - 1);
   });
+
+  // ambient network background — drifting nodes in the xylophone bar hues,
+  // faint links between neighbors; static frame under prefers-reduced-motion
+  (function () {
+    const canvas = document.getElementById("bg");
+    const ctx = canvas.getContext("2d");
+    const hues = ["#d64536", "#e8892a", "#d9b32e", "#3f9c62", "#3b6fd4", "#7a4fe0"];
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let W, H, dpr, nodes = [];
+
+    function resize() {
+      dpr = Math.min(devicePixelRatio || 1, 2);
+      W = innerWidth; H = innerHeight;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const count = Math.round(Math.min(46, Math.max(24, (W * H) / 38000)));
+      nodes = Array.from({ length: count }, () => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.22,
+        vy: (Math.random() - 0.5) * 0.22,
+        r: 1.6 + Math.random() * 2.6,
+        c: hues[(Math.random() * hues.length) | 0],
+      }));
+    }
+
+    const LINK = 150;
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      for (let a = 0; a < nodes.length; a++) {
+        for (let b = a + 1; b < nodes.length; b++) {
+          const dx = nodes[a].x - nodes[b].x, dy = nodes[a].y - nodes[b].y;
+          const d = Math.hypot(dx, dy);
+          if (d < LINK) {
+            ctx.globalAlpha = 0.09 * (1 - d / LINK);
+            ctx.strokeStyle = "#8a7f68";
+            ctx.beginPath();
+            ctx.moveTo(nodes[a].x, nodes[a].y);
+            ctx.lineTo(nodes[b].x, nodes[b].y);
+            ctx.stroke();
+          }
+        }
+      }
+      for (const n of nodes) {
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = n.c;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function tick() {
+      for (const n of nodes) {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < -10) n.x = W + 10; else if (n.x > W + 10) n.x = -10;
+        if (n.y < -10) n.y = H + 10; else if (n.y > H + 10) n.y = -10;
+      }
+      draw();
+      requestAnimationFrame(tick);
+    }
+
+    addEventListener("resize", () => { resize(); draw(); });
+    resize();
+    if (reduced) draw(); else tick();
+  })();
 </script>
 </body>
 </html>
