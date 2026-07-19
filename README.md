@@ -60,26 +60,72 @@ Two red bars, both spelled C. Resolved in three tiers:
    high C, so `C D E F G A B C` plays a real scale
 3. **Default** — `--default-c low|high` (low by default)
 
-## Setup
+## Setup — pick ONE of two ways to run inference
 
-The fine-tune is self-hosted, because New Theory's `model=` is a registry lookup
-with no way to point at a HuggingFace checkpoint.
+Both paths need this once:
 
 ```bash
-# 1. deploy the policy server
-uv sync --extra server
-uv run modal deploy server/modal_ws.py
-
-# 2. point the client at it
-export NT_INFERENCE_URL=wss://<workspace>--xylophone-policy-policy-web.modal.run
-export NT_API_KEY=dummy      # must be non-empty; the SDK checks it before the URL
-
-# 3. on the robot machine
-uv sync --extra hardware
-uv run python3 run.py --check
+git clone https://github.com/nro-bot/lama-hack.git && cd lama-hack
+uv sync --extra hardware --extra server
 ```
 
-`ANTHROPIC_API_KEY` is only needed for the free-text fallback.
+---
+
+### Option A — your own HuggingFace checkpoint, served on Modal
+
+Use this when you have a fine-tune on the Hub, e.g.
+**https://huggingface.co/ArjunPrasaath/play_xylophone_100** (the checkpoint
+this repo is currently tuned for). Any **LeRobot-format** MolmoAct2 fine-tune
+works — swap in your own repo id below.
+
+```bash
+# 1. deploy the GPU server, pointed at your HF checkpoint
+export MOLMOACT_CHECKPOINT="ArjunPrasaath/play_xylophone_100"   # <- your HF repo id
+uv run modal deploy server/modal_ws.py
+#    prints: https://<workspace>--xylophone-policy-policy-web.modal.run
+
+# 2. point the robot client at it (note wss://, not https://)
+export NT_INFERENCE_URL=wss://<workspace>--xylophone-policy-policy-web.modal.run
+
+# 3. smoke-test the server BEFORE touching the arm
+uv run python -m pytest tests/test_fake_client.py -v -s
+
+# 4. play
+uv run python3 run.py --song "C D E F G"
+```
+
+No API keys needed on this path (run.py fills in the SDK's required
+placeholder itself). **Using a different checkpoint than
+`play_xylophone_100`?** Its image size, chunk size, and — critically — its
+trained instruction strings must match this repo's constants: follow
+[GUIDE.md §1](GUIDE.md#1-point-the-code-at-your-checkpoint) (three edits,
+~10 minutes) before deploying.
+
+---
+
+### Option B — New Theory hosted inference (no Modal, no GPU of yours)
+
+Use this to run against a model in New Theory's registry — no server to
+deploy. Note the default `so101` tag is their **base** model, not a xylophone
+fine-tune; ask New Theory to register your checkpoint for a tag of your own.
+
+```bash
+# 1. authenticate once (browser flow, writes ~/.nt/credentials)
+uv run newt login
+
+# 2. make sure no Modal URL is exported (run.py also clears it for you)
+unset NT_INFERENCE_URL
+
+# 3. play against a registry model tag
+uv run python3 run.py --backend newt --model so101 --song "C D E F G"
+```
+
+---
+
+`--backend auto` (the default) picks A when `NT_INFERENCE_URL` is set, B
+otherwise — so after setup, plain `run.py --song ...` does the right thing.
+`ANTHROPIC_API_KEY` is only needed for free-text songs ("play twinkle
+twinkle"); explicit note lists never touch it.
 
 ## Verifying
 
