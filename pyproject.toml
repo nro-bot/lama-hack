@@ -1,0 +1,43 @@
+[project]
+name = "lama-hack"
+version = "0.1.0"
+description = "Play a melody on a xylophone by sequencing a MolmoAct2 SO-101 policy"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "newt @ git+ssh://git@github.com/new-theory-research/newt-python.git",
+    # Pinned to the same SHA the starter uses. Do NOT bump past upstream v0.4.4 —
+    # the so101_follower module was refactored into a unified so_follower package
+    # and embodiment.py's import path disappears.
+    "lerobot @ git+ssh://git@github.com/new-theory-research/lerobot-nt.git@50168c2a16dd4c67275f9918bf327c1513380061",
+    "numpy>=1.26",
+    "opencv-python-headless",
+    # LLM fallback for free-text song requests (notes.py). Optional at runtime:
+    # the regex path never imports it.
+    "anthropic>=0.40",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+# Install with: uv sync --extra hardware — required on the physical rig.
+hardware = [
+    "lerobot[feetech] @ git+ssh://git@github.com/new-theory-research/lerobot-nt.git@50168c2a16dd4c67275f9918bf327c1513380061",
+]
+# Install with: uv sync --extra server — only needed to deploy the Modal policy
+# server, never on the robot machine.
+server = [
+    "modal",
+    "msgpack",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "msgpack", "websockets"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
