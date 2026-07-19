@@ -33,9 +33,26 @@ from sequencer import SequenceComplete, XylophoneSequencer
 # live here rather than in embodiment.py.
 # ---------------------------------------------------------------------------
 
-# Ignored when NT_INFERENCE_URL is set (which is our normal path — the fine-tune
-# is self-hosted on Modal, not in New Theory's registry).
-MODEL = "so101"
+# Two inference backends, selected with --backend:
+#
+#   modal — our self-hosted fine-tune (server/modal_ws.py) behind
+#           NT_INFERENCE_URL. The model tag is ignored (no registry involved),
+#           images go out at 224px, and any non-empty NT_API_KEY satisfies the
+#           SDK (nothing checks its value).
+#   newt  — New Theory's hosted registry. NT_INFERENCE_URL must be UNSET (it
+#           overrides discovery for ALL models, so a stale export silently hits
+#           Modal instead); the model tag is resolved against GET /v1/models;
+#           images go out at 378px (the hosted so101 contract); and a REAL
+#           nt_... API key is required (env NT_API_KEY, or ~/.nt/credentials
+#           written by `newt login` — the SDK falls back to it automatically).
+#
+# The sequencer is backend-agnostic: both paths speak the same wire protocol,
+# and the per-frame prompt override works identically. One honest caveat on
+# newt: the hosted server receiving a CHANGED prompt mid-session is carried by
+# the wire but was never verified server-side — if hosted runs ignore the swap,
+# every note after the first plays the first note's instruction. Watch for that
+# on the first hosted run.
+MODEL = "so101"  # default registry tag for --backend newt; override with --model
 
 # How long each note holds before the sequencer moves on.
 #
@@ -90,6 +107,22 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--check", action="store_true", help="no-hardware config + parser check"
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["auto", "modal", "newt"],
+        default="auto",
+        help=(
+            "inference backend: modal = self-hosted fine-tune via "
+            "NT_INFERENCE_URL; newt = New Theory's hosted registry. "
+            "auto picks modal when NT_INFERENCE_URL is set, else newt."
+        ),
+    )
+    parser.add_argument(
+        "--model",
+        default=MODEL,
+        help=f"registry model tag for --backend newt (default {MODEL!r}); "
+        "ignored by the modal backend",
     )
     parser.add_argument("--arm", default=None, help="arm id from nt.toml")
     parser.add_argument("--site-config", default=None, help="path to nt.toml")
@@ -164,6 +197,76 @@ def _run_check(args: argparse.Namespace) -> None:
     print("[check] ok")
 
 
+def _resolve_backend(args: argparse.Namespace) -> tuple[int, str]:
+    """Pick the inference backend and return (image_size, model_tag).
+
+    Handles the environment hazards that make the two backends interfere:
+    NT_INFERENCE_URL overrides registry discovery for ALL models, so a stale
+    export from a Modal session would silently send hosted-newt runs to Modal;
+    and the SDK demands a non-empty NT_API_KEY before it looks at anything else.
+    """
+    from embodiment import _IMAGE_SIZE, _NEWT_IMAGE_SIZE
+
+    url = os.environ.get("NT_INFERENCE_URL")
+    backend = args.backend
+    if backend == "auto":
+        backend = "modal" if url else "newt"
+        print(f"[backend] auto -> {backend} (NT_INFERENCE_URL {'set' if url else 'unset'})")
+
+    if backend == "modal":
+        if not url:
+            print(
+                "error: --backend modal needs NT_INFERENCE_URL.\n"
+                "  deploy:  uv run modal deploy server/modal_ws.py\n"
+                "  export:  NT_INFERENCE_URL=wss://<workspace>--xylophone-policy-policy-web.modal.run",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        # Nothing checks the key's value on this path, but the SDK refuses to
+        # construct without one — supply the placeholder so users don't have to.
+        if not os.environ.get("NT_API_KEY"):
+            os.environ["NT_API_KEY"] = "dummy"
+        print(f"[backend] modal: {url} (images {_IMAGE_SIZE}px, model tag ignored)")
+        return _IMAGE_SIZE, args.model
+
+    # newt hosted registry.
+    if url:
+        # A leftover export would silently reroute the "hosted" run to Modal.
+        # Clearing it for this process only is strictly better than obeying it.
+        print(
+            f"[backend] newt: ignoring NT_INFERENCE_URL={url!r} for this run "
+            "(it would override registry discovery)",
+        )
+        del os.environ["NT_INFERENCE_URL"]
+
+    # A real key is required here. The SDK itself falls back to
+    # ~/.nt/credentials (written by `newt login`), so only fail if neither
+    # source can work.
+    key = os.environ.get("NT_API_KEY", "")
+    if key and not key.startswith("nt_"):
+        print(
+            f"error: --backend newt needs a real New Theory key; NT_API_KEY is "
+            f"set to {key[:8]!r}... which is not an nt_ key (a leftover "
+            "'dummy' from a Modal session?). Unset it to use ~/.nt/credentials, "
+            "or run `uv run newt login`.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if not key and not Path("~/.nt/credentials").expanduser().exists():
+        print(
+            "error: --backend newt needs credentials: set NT_API_KEY or run "
+            "`uv run newt login` (writes ~/.nt/credentials).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    print(
+        f"[backend] newt registry: model={args.model!r} "
+        f"(images {_NEWT_IMAGE_SIZE}px)"
+    )
+    return _NEWT_IMAGE_SIZE, args.model
+
+
 def main() -> int:
     args = _parse_args()
 
@@ -187,23 +290,19 @@ def main() -> int:
     import newt
     from embodiment import SO101, _EmergencyStop, _start_keyboard_listener
 
-    if not os.environ.get("NT_INFERENCE_URL"):
-        print(
-            "[rig] warning: NT_INFERENCE_URL is unset, so the SDK will resolve "
-            f"model={MODEL!r} against New Theory's registry — which does not host "
-            "your fine-tune. Deploy server/modal_ws.py and export the URL.",
-            file=sys.stderr,
-        )
+    image_size, model = _resolve_backend(args)
 
     _start_keyboard_listener()
 
-    rig = SO101.from_config(site_config_path=args.site_config, arm_id=args.arm)
+    rig = SO101.from_config(
+        site_config_path=args.site_config, arm_id=args.arm, image_size=image_size
+    )
     seq = XylophoneSequencer(rig, labels, seconds_per_note=args.seconds_per_note)
 
     # embodiment= alone is enough: _validate_embodiment (robot.py:645) pulls
     # read_state/execute off the object. Passing all three is redundant.
     robot = newt.Robot(
-        embodiment=seq, model=MODEL, connect_timeout=CONNECT_TIMEOUT_S
+        embodiment=seq, model=model, connect_timeout=CONNECT_TIMEOUT_S
     )
 
     exit_code = 0

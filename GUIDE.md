@@ -219,6 +219,33 @@ uv run python3 run.py --song "C E G" --seconds-per-note 6   # retargeting test
 uv run python3 run.py --song "C D E F G A B C"         # the scale
 ```
 
+### Choosing the inference backend
+
+Two backends exist; `--backend auto` (the default) picks by environment:
+
+| | `--backend modal` | `--backend newt` |
+|---|---|---|
+| what runs the policy | your Modal server (§2) | New Theory's hosted registry |
+| `NT_INFERENCE_URL` | **required** | must be unset — run.py clears a leftover export for you |
+| `NT_API_KEY` | any non-empty value (run.py fills in `dummy`) | a real `nt_...` key, or `uv run newt login` (`~/.nt/credentials`) |
+| model | your `MOLMOACT_CHECKPOINT` | registry tag via `--model` (default `so101`) |
+| image size sent | 224px (your checkpoint's contract) | 378px (hosted so101 contract) |
+
+```bash
+# hosted inference, explicitly:
+uv run python3 run.py --backend newt --model so101 --song "C D E"
+```
+
+run.py refuses footguns loudly: `--backend newt` with a leftover `dummy` key
+errors instead of sending it to the registry, and a stale `NT_INFERENCE_URL`
+is cleared for the process rather than silently rerouting the run to Modal.
+
+One caveat on hosted runs: the per-note prompt swap rides the wire identically
+on both backends, but whether New Theory's server *honors* a changed prompt
+mid-session has never been verified. First hosted run, watch whether note 2
+actually retargets; if it doesn't, hosted sequencing needs one-session-per-note
+instead — say so and we'll add it.
+
 **Ctrl+H at any time = emergency stop + home.** Ctrl+C also works.
 
 Watch the terminal's `[seq] note N/M: <label>` lines against the arm. The

@@ -113,16 +113,22 @@ _JOINT_ORDER = [
     "gripper",
 ]
 
-# Model input image size. 224, NOT the starter's 378: our fine-tune's
-# config.json declares input_features observation.images.cam0/cam1 with shape
-# [3, 224, 224]. The 378 figure belongs to New Theory's hosted so101 base model,
-# which we no longer talk to — we serve our own checkpoint from Modal.
+# Model input image size — BACKEND-SPECIFIC, which is why SO101.__init__ takes
+# it as a parameter. The module constants are the two known contracts:
 #
-# Two cameras at 3x224x224 uint8 is ~301 KB on the wire, comfortably under the
-# websockets 1 MiB default (378 was ~857 KB, native 640x480 would be ~1.77 MB
-# and the server would tear down the connection mid-send).
-# Source: ArjunPrasaath/play_xylophone_100 config.json.
+#   _IMAGE_SIZE (224)      — our self-hosted fine-tune on Modal. Its config.json
+#                            declares observation.images.cam0/cam1 [3, 224, 224]
+#                            (source: ArjunPrasaath/play_xylophone_100).
+#   _NEWT_IMAGE_SIZE (378) — New Theory's hosted so101 base model; the live
+#                            serve contract is image_shape [3, 378, 378]
+#                            (source: the newt-starter-so101 this file vendors).
+#
+# Sending the wrong size is silent and looks like a bad policy. run.py picks
+# per --backend. Wire sizes: 224 → ~301 KB per obs, 378 → ~857 KB; both under
+# the websockets 1 MiB default (native 640x480 would be ~1.77 MB and the server
+# would tear down the connection mid-send).
 _IMAGE_SIZE = 224
+_NEWT_IMAGE_SIZE = 378
 
 # ACTION_INTERVAL_S: per-action cadence while streaming a chunk. 15 fps is the
 # common lerobot teleop/eval cadence; the exact fps the so101 fine-tune expects
@@ -410,6 +416,7 @@ class SO101:
         site_config_path: Path | str | None = None,
         max_actions_per_chunk: int = MAX_ACTIONS_PER_CHUNK,
         arm_id: str | None = None,
+        image_size: int = _IMAGE_SIZE,
     ) -> "SO101":
         """Construct from ~/.config/nt/nt.toml (or a custom path).
 
@@ -430,6 +437,7 @@ class SO101:
             port=port,
             cameras=cameras,
             max_actions_per_chunk=max_actions_per_chunk,
+            image_size=image_size,
         )
 
     def __init__(
@@ -440,6 +448,7 @@ class SO101:
         max_actions_per_chunk: int = MAX_ACTIONS_PER_CHUNK,
         use_degrees: bool = False,
         max_relative_target: int | None = None,
+        image_size: int = _IMAGE_SIZE,
     ) -> None:
         """Construct from explicit values — reads no config file.
 
@@ -451,6 +460,9 @@ class SO101:
         max_relative_target: None (default) sends goal positions unclamped, as
           lerobot does by default. Set a positive scalar to cap per-step motion
           for safety once the rig's motion is characterized in the smoke.
+        image_size: square resize applied to every camera frame — backend-
+          specific (224 for the Modal fine-tune, _NEWT_IMAGE_SIZE=378 for the
+          hosted so101). run.py picks this per --backend.
         """
         _import_hardware_deps()
         if not _LEROBOT_AVAILABLE:
@@ -462,6 +474,7 @@ class SO101:
 
         self._arm_id = arm_id
         self.max_actions_per_chunk = max_actions_per_chunk
+        self.image_size = image_size
         self.chunks_observed: int = 0  # incremented by execute(); read by trial loop
         self._first_chunk_sent = False
 
@@ -546,16 +559,17 @@ class SO101:
             dtype=np.float32,
         )
 
-        # Images: HWC RGB uint8 → resize to 378x378 square → CHW.
+        # Images: HWC RGB uint8 → resize to the backend's square size → CHW.
         import cv2 as _cv2
 
+        size = self.image_size
         images: dict[str, np.ndarray] = {}
         for cam in _CAMERA_KEYS:
             frame = np.asarray(obs_raw[cam], dtype=np.uint8)  # (H, W, 3) RGB
             resized = _cv2.resize(
-                frame, (_IMAGE_SIZE, _IMAGE_SIZE), interpolation=_cv2.INTER_AREA
+                frame, (size, size), interpolation=_cv2.INTER_AREA
             )
-            images[cam] = resized.transpose(2, 0, 1)  # (3, 378, 378)
+            images[cam] = resized.transpose(2, 0, 1)  # (3, size, size)
 
         return {"state": state, "images": images}
 
