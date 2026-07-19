@@ -18,6 +18,20 @@ Press **Ctrl+H** at any time to abort and home the arm.
 > swap in any LeRobot-format MolmoAct2 fine-tune from HuggingFace and every
 > failure mode we actually hit along the way.
 
+## Slides
+
+A presentation covering the datasets, training runs, and both inference paths
+lives in [`slides.html`](slides.html) — a single self-contained file, no build
+step or dependencies.
+
+- **View online (no clone needed):**
+  https://raw.githack.com/nro-bot/lama-hack/main/slides.html
+- **View locally:** `open slides.html` (macOS) or just open the file in any
+  browser after cloning.
+
+Navigate with **→ / ←**, spacebar, or by clicking the right/left side of the
+screen.
+
 ## How it works
 
 The policy knows eight instructions, and only these eight:
