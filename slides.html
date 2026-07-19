@@ -344,6 +344,7 @@
     i = Math.max(0, Math.min(slides.length - 1, n));
     slides.forEach((s, k) => s.classList.toggle("active", k === i));
     counter.textContent = (i + 1) + " / " + slides.length;
+    if (window.bgGo) window.bgGo(i);
   }
   addEventListener("keydown", (e) => {
     if (["ArrowRight", " ", "PageDown"].includes(e.key)) { e.preventDefault(); go(i + 1); }
@@ -356,71 +357,74 @@
     go(e.clientX > innerWidth / 3 ? i + 1 : i - 1);
   });
 
-  // ambient network background — drifting nodes in the xylophone bar hues,
-  // faint links between neighbors; static frame under prefers-reduced-motion
+  // ambient background — a few large soft shapes in the xylophone bar hues.
+  // They sit still except when you navigate: advancing eases them left,
+  // going back eases them right, with parallax (nearer shapes travel farther).
   (function () {
     const canvas = document.getElementById("bg");
     const ctx = canvas.getContext("2d");
-    const hues = ["#d64536", "#e8892a", "#d9b32e", "#3f9c62", "#3b6fd4", "#7a4fe0"];
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let W, H, dpr, nodes = [];
+    let W, H, dpr;
+
+    // x/y in viewport fractions, r in fractions of the larger viewport side,
+    // depth scales how far a shape travels per slide (parallax)
+    const shapes = [
+      { x: 0.12, y: 0.20, r: 0.34, c: "232,137,42",  a: 0.10, depth: 1.00 },
+      { x: 0.85, y: 0.75, r: 0.40, c: "59,111,212",  a: 0.08, depth: 0.65 },
+      { x: 0.55, y: 0.05, r: 0.26, c: "63,156,98",   a: 0.09, depth: 0.85 },
+      { x: 0.30, y: 0.95, r: 0.30, c: "214,69,54",   a: 0.07, depth: 0.50 },
+      { x: 0.98, y: 0.25, r: 0.22, c: "122,79,224",  a: 0.08, depth: 1.20 },
+      { x: 0.45, y: 0.55, r: 0.18, c: "217,179,46",  a: 0.09, depth: 1.45 },
+    ];
+
+    const STEP = 220;          // px each slide shifts a depth-1 shape
+    let offset = 0, target = 0, raf = null;
 
     function resize() {
       dpr = Math.min(devicePixelRatio || 1, 2);
       W = innerWidth; H = innerHeight;
       canvas.width = W * dpr; canvas.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const count = Math.round(Math.min(46, Math.max(24, (W * H) / 38000)));
-      nodes = Array.from({ length: count }, () => ({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.22,
-        vy: (Math.random() - 0.5) * 0.22,
-        r: 1.6 + Math.random() * 2.6,
-        c: hues[(Math.random() * hues.length) | 0],
-      }));
+      draw();
     }
 
-    const LINK = 150;
     function draw() {
       ctx.clearRect(0, 0, W, H);
-      for (let a = 0; a < nodes.length; a++) {
-        for (let b = a + 1; b < nodes.length; b++) {
-          const dx = nodes[a].x - nodes[b].x, dy = nodes[a].y - nodes[b].y;
-          const d = Math.hypot(dx, dy);
-          if (d < LINK) {
-            ctx.globalAlpha = 0.09 * (1 - d / LINK);
-            ctx.strokeStyle = "#8a7f68";
-            ctx.beginPath();
-            ctx.moveTo(nodes[a].x, nodes[a].y);
-            ctx.lineTo(nodes[b].x, nodes[b].y);
-            ctx.stroke();
-          }
-        }
-      }
-      for (const n of nodes) {
-        ctx.globalAlpha = 0.16;
-        ctx.fillStyle = n.c;
+      const span = Math.max(W, H);
+      for (const s of shapes) {
+        const travel = offset * s.depth;
+        const period = W + 2 * span * s.r;
+        // wrap so shapes re-enter from the other side instead of leaving forever
+        let cx = s.x * W - travel;
+        cx = ((cx + span * s.r) % period + period) % period - span * s.r;
+        const cy = s.y * H;
+        const r = s.r * span;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, "rgba(" + s.c + "," + s.a + ")");
+        g.addColorStop(1, "rgba(" + s.c + ",0)");
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.globalAlpha = 1;
     }
 
-    function tick() {
-      for (const n of nodes) {
-        n.x += n.vx; n.y += n.vy;
-        if (n.x < -10) n.x = W + 10; else if (n.x > W + 10) n.x = -10;
-        if (n.y < -10) n.y = H + 10; else if (n.y > H + 10) n.y = -10;
-      }
+    function animate() {
+      const d = target - offset;
+      if (Math.abs(d) < 0.5) { offset = target; draw(); raf = null; return; }
+      offset += d * 0.07;
       draw();
-      requestAnimationFrame(tick);
+      raf = requestAnimationFrame(animate);
     }
 
-    addEventListener("resize", () => { resize(); draw(); });
+    window.bgGo = function (slideIndex) {
+      target = slideIndex * STEP;
+      if (reduced) { offset = target; draw(); return; }
+      if (!raf) raf = requestAnimationFrame(animate);
+    };
+
+    addEventListener("resize", resize);
     resize();
-    if (reduced) draw(); else tick();
   })();
 </script>
 </body>
