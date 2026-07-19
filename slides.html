@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}</style>
+<title>Xylophone Policy — Training &amp; Inference</title>
+</head>
+<body>
+<style>
+  :root {
+    --paper: #fcfcfa;
+    --raise: #ffffff;
+    --ink: #1c1b22;
+    --muted: #6d6a78;
+    --line: #e6e4df;
+    --bar-blue: #3b6fd4;
+    --bar-purple: #7a4fe0;
+    --bar-red: #d64536;
+    --bar-orange: #e8892a;
+    --bar-yellow: #d9b32e;
+    --bar-green: #3f9c62;
+    --accent: var(--bar-orange);
+    --mono: "SF Mono", "Menlo", "Cascadia Code", monospace;
+    --display: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  }
+
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--display);
+    overflow: hidden;
+    font-size: clamp(14px, 1.35vw, 19px);
+  }
+
+  .deck { height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    padding: 5vh 6vw 10vh;
+    max-width: 1280px; margin: 0 auto;
+  }
+  .slide.active { display: flex; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.68em;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1.4em;
+  }
+
+  h1 {
+    font-size: 3.4em; font-weight: 600; line-height: 1.05;
+    letter-spacing: -0.02em; text-wrap: balance; margin: 0 0 0.4em;
+  }
+  h2 {
+    font-size: 2.1em; font-weight: 600; line-height: 1.1;
+    letter-spacing: -0.015em; text-wrap: balance; margin: 0 0 1em;
+  }
+  .sub { color: var(--muted); font-size: 1.12em; max-width: 34em; line-height: 1.55; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code {
+    background: #f1f0ec;
+    border-radius: 4px;
+    padding: 0.12em 0.4em;
+    white-space: nowrap;
+  }
+
+  /* xylophone strip — title motif */
+  .bars { display: flex; gap: 0.5em; align-items: flex-end; margin: 2.4em 0 0; height: 8em; }
+  .bars .bar {
+    flex: 1; border-radius: 4px;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 0.55em;
+    font-family: var(--mono); font-size: 0.75em; font-weight: 600;
+    color: rgba(255,255,255,0.92);
+  }
+
+  .footer {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 6vw 2.2vh;
+    font-family: var(--mono); font-size: 0.7em; color: var(--muted);
+  }
+  .footer .strip { display: flex; gap: 4px; }
+  .footer .strip span { width: 22px; height: 4px; border-radius: 2px; display: block; }
+
+  /* cards */
+  .cards { display: grid; gap: 1.2em; grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+  .card {
+    background: var(--raise);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.4em 1.5em 1.5em;
+    display: flex; flex-direction: column; gap: 0.6em;
+  }
+  .card .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--edge, var(--line)); margin-bottom: 0.3em; }
+  .card .kicker {
+    font-family: var(--mono); font-size: 0.66em; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .card h3 { font-size: 1.18em; font-weight: 600; margin: 0; line-height: 1.25; }
+  .card p { color: var(--muted); line-height: 1.55; font-size: 0.92em; margin: 0; }
+  .card .stat {
+    font-family: var(--mono); font-size: 2em; font-weight: 600;
+    color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;
+    margin-top: auto; padding-top: 0.7em;
+  }
+  .card .stat small { font-size: 0.42em; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4em; align-items: stretch; }
+
+  /* pipeline */
+  .pipe { display: flex; align-items: stretch; gap: 0; margin-top: 0.5em; }
+  .pipe .stage {
+    flex: 1; background: var(--raise); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1.3em 1.3em 1.4em;
+  }
+  .pipe .arrow {
+    align-self: center; padding: 0 0.7em; color: var(--muted);
+    font-size: 1.3em; flex: 0 0 auto;
+  }
+  .pipe .stage .kicker {
+    font-family: var(--mono); font-size: 0.65em; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.7em;
+  }
+  .pipe .stage b { display: block; font-size: 1.05em; font-weight: 600; margin-bottom: 0.4em; }
+  .pipe .stage p { color: var(--muted); font-size: 0.85em; line-height: 1.5; margin: 0; }
+
+  ul.fact { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9em; }
+  ul.fact li { display: flex; gap: 0.85em; line-height: 1.55; }
+  ul.fact li::before { content: ""; flex: 0 0 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 0.55em; }
+  ul.fact li span { color: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.92em; background: var(--raise); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 0.7em 1em; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  th { font-family: var(--mono); font-size: 0.7em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: #f6f5f2; }
+  td.mono { font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+
+  .hint { position: absolute; right: 6vw; bottom: 6.5vh; font-family: var(--mono); font-size: 0.7em; color: var(--muted); }
+
+  @media (max-width: 760px) {
+    .slide { padding: 3vh 5vw 12vh; }
+    .cards, .two-col { grid-template-columns: 1fr; }
+    .pipe { flex-direction: column; }
+    .pipe .arrow { transform: rotate(90deg); padding: 0.2em 0; text-align: center; }
+    h1 { font-size: 2.3em; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .slide.active { animation: rise 300ms ease-out; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+
+<div class="deck">
+
+  <!-- 1 · title -->
+  <section class="slide active">
+    <div class="eyebrow">lama-hack · SO-101 + MolmoAct2</div>
+    <h1>Text in, melody out.</h1>
+    <p class="sub">Fine-tuning a single-task MolmoAct2 policy to strike xylophone bars with an SO-101 arm — the data, the training runs, and two ways to serve it.</p>
+    <div class="bars">
+      <div class="bar" style="background:var(--bar-red); height:100%">C</div>
+      <div class="bar" style="background:var(--bar-orange); height:91%">D</div>
+      <div class="bar" style="background:var(--bar-yellow); height:83%">E</div>
+      <div class="bar" style="background:var(--bar-green); height:75%">F</div>
+      <div class="bar" style="background:var(--bar-blue); height:68%">G</div>
+      <div class="bar" style="background:var(--bar-blue); height:61%">A</div>
+      <div class="bar" style="background:var(--bar-purple); height:55%">B</div>
+      <div class="bar" style="background:var(--bar-red); height:50%">C′</div>
+    </div>
+    <div class="hint">→ to advance</div>
+  </section>
+
+  <!-- 2 · pipeline -->
+  <section class="slide">
+    <div class="eyebrow">Overview</div>
+    <h2>One pipeline, four stages</h2>
+    <div class="pipe">
+      <div class="stage">
+        <span class="kicker">Collect</span>
+        <b>Teleop demos</b>
+        <p>Human demonstrations of striking each bar, recorded in LeRobot format with two cameras.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="stage">
+        <span class="kicker">Train</span>
+        <b>Imitation learning</b>
+        <p>MolmoAct2 fine-tuned for 8k steps on New Theory's training platform and on Modal.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="stage">
+        <span class="kicker">Serve</span>
+        <b>Two backends</b>
+        <p>HF checkpoint deployed as a Modal WebSocket server, or New Theory hosted inference.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="stage">
+        <span class="kicker">Play</span>
+        <b>Sequencer</b>
+        <p><code>run.py --song "C D E F G"</code> — one WebSocket session, instruction swapped per note.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · datasets -->
+  <section class="slide">
+    <div class="eyebrow">Data</div>
+    <h2>Three datasets, one skill</h2>
+    <div class="cards">
+      <div class="card" style="--edge:var(--bar-blue)">
+        <div class="dot"></div>
+        <span class="kicker">Dataset 1</span>
+        <h3>Individual notes</h3>
+        <p>One note per episode — each demonstration strikes a single labeled bar. Published as <code>ArjunPrasaath/training_xylophone</code> on HuggingFace.</p>
+        <div class="stat">120 <small>episodes</small></div>
+      </div>
+      <div class="card" style="--edge:var(--bar-yellow)">
+        <div class="dot"></div>
+        <span class="kicker">Dataset 2</span>
+        <h3>All notes</h3>
+        <p>Longer episodes covering every bar in sequence, giving the policy context on transitions between bars.</p>
+        <div class="stat">10 <small>episodes</small></div>
+      </div>
+      <div class="card" style="--edge:var(--bar-green)">
+        <div class="dot"></div>
+        <span class="kicker">Dataset 3</span>
+        <h3>Combined</h3>
+        <p>The union of both — per-note precision from dataset 1, whole-instrument coverage from dataset 2.</p>
+        <div class="stat">130 <small>episodes</small></div>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:1.4em; font-size:0.95em">Every episode carries one of eight fixed instruction strings (e.g. <code>Hitting note D (orange)</code>) — the exact labels the sequencer replays at inference time.</p>
+  </section>
+
+  <!-- 4 · training -->
+  <section class="slide">
+    <div class="eyebrow">Training</div>
+    <h2>Imitation learning, run twice</h2>
+    <div class="two-col">
+      <div class="card" style="--edge:var(--bar-purple)">
+        <div class="dot"></div>
+        <span class="kicker">Platform A</span>
+        <h3>New Theory training platform</h3>
+        <p>Managed fine-tuning of the MolmoAct2 base model on the LeRobot datasets — upload data, pick the base, launch.</p>
+      </div>
+      <div class="card" style="--edge:var(--bar-orange)">
+        <div class="dot"></div>
+        <span class="kicker">Platform B</span>
+        <h3>Modal</h3>
+        <p>The same recipe run as our own GPU job on Modal, for full control over the training loop and checkpointing.</p>
+      </div>
+    </div>
+    <div style="margin-top:1.6em">
+      <ul class="fact">
+        <li>Behavior cloning on teleop demos — <span>the policy imitates the human strikes; no reward signal, no simulator.</span></li>
+        <li>8,000 training steps — <span>per run, from the MolmoAct2 base.</span></li>
+        <li>Output: <code>ArjunPrasaath/play_xylophone_100</code> — <span>a public LeRobot-format checkpoint on HuggingFace, the one this repo is tuned for.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5 · contract -->
+  <section class="slide">
+    <div class="eyebrow">Checkpoint contract</div>
+    <h2>What the model expects</h2>
+    <p class="sub" style="margin-bottom:1.4em">Pinned from the checkpoint's <code>config.json</code> and enforced by <code>tests/test_contract.py</code> — a mismatched client fails in tests, not mid-performance.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Property</th><th>Value</th><th>Why it matters</th></tr>
+        <tr><td>Cameras</td><td class="mono">cam0 / cam1 · 3×224×224</td><td>224px — <em>not</em> the base model's 378</td></tr>
+        <tr><td>Action chunk</td><td class="mono">30 steps (client slices 15)</td><td>Fresh predictions twice per chunk</td></tr>
+        <tr><td>Normalization</td><td class="mono">QUANTILES (state + action)</td><td>Pre/post processors are mandatory</td></tr>
+        <tr><td>Instructions</td><td class="mono">8 fixed strings</td><td>The only labels the policy has ever seen</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6 · inference -->
+  <section class="slide">
+    <div class="eyebrow">Inference · this repo</div>
+    <h2>Two ways to serve, one client</h2>
+    <div class="two-col">
+      <div class="card" style="--edge:var(--bar-blue)">
+        <div class="dot"></div>
+        <span class="kicker">Option A · bring your checkpoint</span>
+        <h3>HuggingFace → Modal</h3>
+        <p><code>modal deploy server/modal_ws.py</code> loads the HF checkpoint onto a GPU and exposes a WebSocket endpoint. Point <code>NT_INFERENCE_URL</code> at it. Works for any LeRobot-format MolmoAct2 fine-tune.</p>
+      </div>
+      <div class="card" style="--edge:var(--bar-green)">
+        <div class="dot"></div>
+        <span class="kicker">Option B · nothing to deploy</span>
+        <h3>New Theory inference API</h3>
+        <p><code>newt login</code> once, then <code>run.py --backend newt --model &lt;tag&gt;</code> runs against a model in New Theory's registry — no server, no GPU of ours.</p>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:1.4em; font-size:0.95em"><code>--backend auto</code> (the default) picks A when <code>NT_INFERENCE_URL</code> is set, B otherwise — after setup, plain <code>run.py --song ...</code> just works.</p>
+  </section>
+
+  <!-- 7 · sequencer -->
+  <section class="slide">
+    <div class="eyebrow">Runtime</div>
+    <h2>A single-note policy that plays songs</h2>
+    <ul class="fact" style="max-width:44em">
+      <li>One WebSocket, whole song — <span>the newt SDK rebuilds the prompt from the observation dict every frame, so the sequencer swaps the instruction under one persistent <code>run()</code> call. No audible reconnect gap between notes.</span></li>
+      <li>Guarded vocabulary — <span><code>notes.py</code> is the chokepoint: regex parsing, with a Claude fallback constrained to an enum of the eight trained keys. Nothing untrained ever reaches the model.</span></li>
+      <li>Verified before hardware — <span>full smoke test against the deployed server: correct (30, 6) action chunks, all 8 labels accepted, different notes produce different actions.</span></li>
+    </ul>
+  </section>
+
+  <div class="footer">
+    <div class="strip">
+      <span style="background:var(--bar-red)"></span>
+      <span style="background:var(--bar-orange)"></span>
+      <span style="background:var(--bar-yellow)"></span>
+      <span style="background:var(--bar-green)"></span>
+      <span style="background:var(--bar-blue)"></span>
+      <span style="background:var(--bar-purple)"></span>
+    </div>
+    <div>lama-hack · training &amp; inference</div>
+    <div class="mono" id="counter" style="font-variant-numeric:tabular-nums">1 / 7</div>
+  </div>
+</div>
+
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const counter = document.getElementById("counter");
+  let i = 0;
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle("active", k === i));
+    counter.textContent = (i + 1) + " / " + slides.length;
+  }
+  addEventListener("keydown", (e) => {
+    if (["ArrowRight", " ", "PageDown"].includes(e.key)) { e.preventDefault(); go(i + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); go(i - 1); }
+    if (e.key === "Home") go(0);
+    if (e.key === "End") go(slides.length - 1);
+  });
+  document.querySelector(".deck").addEventListener("click", (e) => {
+    if (e.target.closest("code, a")) return;
+    go(e.clientX > innerWidth / 3 ? i + 1 : i - 1);
+  });
+</script>
+</body>
+</html>
