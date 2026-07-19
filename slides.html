@@ -11,7 +11,7 @@
   :root {
     --paper: #f6f1e6;
     --raise: #fdfaf3;
-    --ink: #2a2620;
+    --ink: #22332d;
     --muted: #787061;
     --line: #e4dccb;
     --bar-blue: #3b6fd4;
@@ -20,7 +20,9 @@
     --bar-orange: #e8892a;
     --bar-yellow: #d9b32e;
     --bar-green: #3f9c62;
-    --accent: var(--bar-orange);
+    --nt-green: #1a3a32;
+    --nt-mint: #03ffaa;
+    --accent: #10805c;
     --mono: "SF Mono", "Menlo", "Cascadia Code", monospace;
     --display: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
   }
@@ -366,18 +368,23 @@
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let W, H, dpr;
 
+    // New Theory-style flat geometry: bold outlined circles, concentric
+    // rings, and orbital ellipses in dark green / pop mint / blue.
     // x/y in viewport fractions, r in fractions of the larger viewport side,
-    // depth scales how far a shape travels per slide (parallax)
+    // depth scales how far a shape travels per slide (parallax).
+    const GREEN = "26,58,50", MINT = "3,255,170", BLUE = "0,130,243";
     const shapes = [
-      { x: 0.12, y: 0.20, r: 0.34, c: "232,137,42",  a: 0.10, depth: 1.00 },
-      { x: 0.85, y: 0.75, r: 0.40, c: "59,111,212",  a: 0.08, depth: 0.65 },
-      { x: 0.55, y: 0.05, r: 0.26, c: "63,156,98",   a: 0.09, depth: 0.85 },
-      { x: 0.30, y: 0.95, r: 0.30, c: "214,69,54",   a: 0.07, depth: 0.50 },
-      { x: 0.98, y: 0.25, r: 0.22, c: "122,79,224",  a: 0.08, depth: 1.20 },
-      { x: 0.45, y: 0.55, r: 0.18, c: "217,179,46",  a: 0.09, depth: 1.45 },
+      { type: "disc",  x: 0.14, y: 0.24, r: 0.13, fill: MINT,  fa: 0.30, sc: GREEN, sa: 0.45, depth: 1.00 },
+      { type: "rings", x: 0.82, y: 0.78, r: 0.20, sc: GREEN, sa: 0.30, n: 3, depth: 0.60 },
+      { type: "orbit", x: 0.55, y: 0.10, r: 0.16, sc: GREEN, sa: 0.35, tilt: -0.35, depth: 0.85 },
+      { type: "ring",  x: 0.32, y: 0.90, r: 0.11, sc: BLUE,  sa: 0.40, depth: 1.25 },
+      { type: "disc",  x: 0.97, y: 0.30, r: 0.07, fill: BLUE, fa: 0.18, sc: GREEN, sa: 0.40, depth: 1.50 },
+      { type: "orbit", x: 0.08, y: 0.65, r: 0.12, sc: GREEN, sa: 0.30, tilt: 0.5, depth: 0.75 },
+      { type: "ring",  x: 0.68, y: 0.52, r: 0.26, sc: GREEN, sa: 0.18, depth: 0.45 },
+      { type: "disc",  x: 0.45, y: 0.40, r: 0.035, fill: MINT, fa: 0.55, sc: GREEN, sa: 0.55, depth: 1.75 },
     ];
 
-    const STEP = 220;          // px each slide shifts a depth-1 shape
+    const STEP = 320;          // px each slide shifts a depth-1 shape
     let offset = 0, target = 0, raf = null;
 
     function resize() {
@@ -393,19 +400,47 @@
       const span = Math.max(W, H);
       for (const s of shapes) {
         const travel = offset * s.depth;
-        const period = W + 2 * span * s.r;
+        const margin = span * s.r * 1.4;
+        const period = W + 2 * margin;
         // wrap so shapes re-enter from the other side instead of leaving forever
         let cx = s.x * W - travel;
-        cx = ((cx + span * s.r) % period + period) % period - span * s.r;
+        cx = ((cx + margin) % period + period) % period - margin;
         const cy = s.y * H;
         const r = s.r * span;
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, "rgba(" + s.c + "," + s.a + ")");
-        g.addColorStop(1, "rgba(" + s.c + ",0)");
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.lineWidth = Math.max(1.5, r * 0.02);
+
+        if (s.type === "disc") {
+          ctx.fillStyle = "rgba(" + s.fill + "," + s.fa + ")";
+          ctx.strokeStyle = "rgba(" + s.sc + "," + s.sa + ")";
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else if (s.type === "ring") {
+          ctx.strokeStyle = "rgba(" + s.sc + "," + s.sa + ")";
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (s.type === "rings") {
+          ctx.strokeStyle = "rgba(" + s.sc + "," + s.sa + ")";
+          for (let k = 1; k <= s.n; k++) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r * (k / s.n), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        } else if (s.type === "orbit") {
+          // a circle with two flattened orbital ellipses through it,
+          // echoing the Vision/Problem/Solution marks on newtheory.ai
+          ctx.strokeStyle = "rgba(" + s.sc + "," + s.sa + ")";
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          for (const f of [0.32, 0.62]) {
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, r, r * f, s.tilt, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
       }
     }
 
