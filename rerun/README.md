@@ -2,6 +2,8 @@
 
 Hackathon project: analyzing xylophone-playing robot arm data from an SO-100 robot arm.
 
+[Presentation slides](https://docs.google.com/presentation/d/1L19RGcJZgJ3UnwINjAbeo7gdjcYsdeQwwmN35AAgn9I/edit?usp=sharing)
+
 Data is in LeRobot v3 dataset format (parquet) and/or already logged to Rerun as `.rrd`
 recording files. There is no audio in the dataset — all analysis (strike detection,
 timing, velocity/acceleration metrics, etc.) is derived from joint kinematics.
