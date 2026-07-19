@@ -13,6 +13,11 @@ uv run python3 run.py --dry-run --song "C D E"                    # parse only
 
 Press **Ctrl+H** at any time to abort and home the arm.
 
+> **New here, or bringing your own checkpoint?** Follow **[GUIDE.md](GUIDE.md)**
+> — a step-by-step runbook from fresh clone to a playing arm, including how to
+> swap in any LeRobot-format MolmoAct2 fine-tune from HuggingFace and every
+> failure mode we actually hit along the way.
+
 ## How it works
 
 The policy knows eight instructions, and only these eight:
