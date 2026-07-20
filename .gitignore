@@ -9,3 +9,5 @@ rerun/data/*
 !rerun/data/.gitkeep
 rerun/output/*
 !rerun/output/.gitkeep
+
+datasets/

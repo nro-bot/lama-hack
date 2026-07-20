@@ -175,6 +175,12 @@ uv run python3 run.py --song "C"
 uv run python3 run.py --song "C D E F G A B C"
 ```
 
+## Datasets
+
+Present in huggingface:
+- https://huggingface.co/datasets/dakshaladia1/combined-hackathon
+- https://huggingface.co/datasets/dakshaladia1/multiple-3
+
 ## Tuning
 
 | knob | where | note |
